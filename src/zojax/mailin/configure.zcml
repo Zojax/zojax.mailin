@@ -1,0 +1,29 @@
+<configure
+   xmlns="http://namespaces.zope.org/zope"
+   xmlns:zojax="http://namespaces.zope.org/zojax"
+   i18n_domain="zojax.mailin">
+
+  <!-- mail-in configlet -->
+  <zojax:configlet
+     name="system.mailin"
+     schema=".interfaces.IMailIn"
+     title="Mail-in settings"
+     description="Configure portal mail-in settings."
+     class=".configlet.MailInConfiglet" />
+
+  <!-- mail-in aware -->
+  <adapter factory=".mailinaware.getMailInDestination" />
+
+  <class class=".mailinaware.MailInAwareDestination">
+    <require
+       permission="zope.Public"
+       interface=".interfaces.IMailInAwareDestination"
+       set_schema=".interfaces.IMailInAwareDestination" />
+  </class>
+
+  <subscriber handler=".mailinaware.objectRemovedEvent" />
+
+  <!-- browser views -->
+  <include package=".browser" />
+
+</configure>

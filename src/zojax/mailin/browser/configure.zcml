@@ -1,0 +1,55 @@
+<configure
+   xmlns="http://namespaces.zope.org/zope"
+   xmlns:zojax="http://namespaces.zope.org/zojax"
+   xmlns:browser="http://namespaces.zope.org/browser"
+   i18n_domain="zojax.mailin">
+
+  <zojax:pagelet
+     name="mailinTransport"
+     for="zope.app.component.interfaces.ISite"
+     class=".transport.MailInTransport"
+     permission="zope.Public" />
+
+  <!-- configlet -->
+  <zojax:pagelet
+     name="index.html"
+     for="..interfaces.IMailIn"
+     class="zojax.controlpanel.browser.wizard.ConfigletEditWizard"
+     permission="zojax.Configure" />
+
+  <zojax:pagelet
+     name="mailloader"
+     type="wizard.step"
+     title="Mail Loader"
+     for="..interfaces.IMailIn
+	  zojax.controlpanel.browser.interfaces.IConfigletEditWizard"
+     template="mailloader.pt"
+     class="zojax.wizard.step.WizardStep"
+     weight="200"
+     permission="zope.View" />
+
+  <zojax:pagelet
+     name="mailloader.py"
+     for="..interfaces.IMailIn"
+     class=".mailloader.MailloaderScript"
+     permission="zojax.Configure" />
+
+  <!-- IMailInAware -->
+  <zojax:pagelet
+     name="mailin"
+     type="wizard.step"
+     title="Mail-in"
+     label="Mail-in"
+     for="..interfaces.IMailInAware
+	  zojax.content.forms.interfaces.IEditContentWizard"
+     class=".mailinaware.MailInAwareForm"
+     weight="250"
+     permission="zojax.Configure" />
+
+  <!-- icons -->
+  <browser:icon
+     name="zmi_icon"
+     for="..interfaces.IMailIn"
+     file="mailin.png" />
+
+</configure>

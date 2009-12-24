@@ -1,0 +1,179 @@
+=========================
+Mail-in aware destination
+=========================
+
+  >>> from email.MIMEText import MIMEText
+
+  >>> from zope import component, interface
+  >>> from zope.interface.verify import verifyObject
+  >>> from zope.app.component.hooks import getSite, setSite
+  >>> from zope.publisher.browser import TestRequest
+
+  >>> from zojax.mailin import interfaces
+  >>> from zojax.mailin.tests.tests import IContent, Content
+
+  >>> root = getRootFolder()
+  >>> setSite(root)
+  >>> mailin = component.getUtility(interfaces.IMailIn)
+
+  >>> content = Content()
+  >>> root['content'] = content
+
+  >>> content1 = Content()
+  >>> root['content1'] = content1
+
+
+Mail-in aware destination
+-------------------------
+
+  >>> print interfaces.IMailInAwareDestination(content, None)
+  None
+
+  >>> interface.alsoProvides(content, interfaces.IMailInAware)
+
+  >>> mailin = interfaces.IMailInAwareDestination(content, None)
+
+  >>> verifyObject(interfaces.IMailInAwareDestination, mailin)
+  True
+
+  >>> mailin.address = u'comments@zojax.net'
+  >>> print component.queryUtility(
+  ...     interfaces.IMailInDestination, 'comments@zojax.net')
+  None
+
+  >>> mailin.enabled = True
+
+  >>> dest = component.queryUtility(
+  ...     interfaces.IMailInDestination, 'comments@zojax.net')
+  >>> dest is mailin
+  True
+
+  >>> mailin.address = u'reply@zojax.net'
+
+  >>> dest = component.queryUtility(
+  ...     interfaces.IMailInDestination, 'reply@zojax.net')
+  >>> dest is mailin
+  True
+
+  >>> print component.queryUtility(
+  ...     interfaces.IMailInDestination, 'comments@zojax.net')
+  None
+
+tring register destination with same address
+
+  >>> interface.alsoProvides(content1, interfaces.IMailInAware)
+  >>> mailin1 = interfaces.IMailInAwareDestination(content1)
+  >>> mailin1.enabled = True
+  >>> mailin1.address = 'reply@zojax.net'
+  Traceback (most recent call last):
+  ...
+  MailInException: Mail-in email address already in use: reply@zojax.net
+
+process
+-------
+
+  >>> msg = MIMEText('Test mail message', 'plain', 'ascii')
+  >>> msg['From'] = 'nkim@zojax.net'
+
+  >>> mailin.process(msg)
+  Traceback (most recent call last):
+  ...
+  MailInException: Recipent not found.
+
+Let's define IRecipient
+
+  >>> from zope.security.management import getInteraction
+
+  >>> emails = []
+
+  >>> class ContentRecipient(object):
+  ...     component.adapts(IContent)
+  ...     interface.implements(interfaces.IRecipient)
+  ...     
+  ...     error = False
+  ...     
+  ...     def __init__(self, context):
+  ...         self.context = context
+  ...     
+  ...     def process(self, message):
+  ...         if self.error:
+  ...             raise 'Error'
+  ...         emails.append((
+  ...             getInteraction().participations[0].principal, message))
+
+  >>> component.provideAdapter(ContentRecipient)
+
+  >>> mailin.process(msg)
+  Traceback (most recent call last):
+  ...
+  MailInException: Member not found: nkim@zojax.net
+
+We can allow anonymous mailin
+
+  >>> interface.classImplements(ContentRecipient, interfaces.IAnonymousSupport)
+
+  >>> mailin.process(msg)
+
+  >>> emails[0][0].id
+  'zope.anybody'
+
+  >>> print str(emails[0][1])
+  From nobody ...
+  MIME-Version: 1.0
+  Content-Type: text/plain; charset="us-ascii"
+  Content-Transfer-Encoding: 7bit
+  From: nkim@zojax.net
+  Test mail message
+
+  >>> from zope.publisher.browser import TestRequest
+  >>> from zope.security.management import newInteraction, endInteraction
+  >>> from zope.app.security.interfaces import IAuthentication
+
+  >>> auth = component.getUtility(IAuthentication)
+
+  >>> emails = []
+  >>> admin = auth.getPrincipal('zope.mgr')
+  >>> request = TestRequest()
+  >>> request.setPrincipal(admin)
+  >>> newInteraction(request)
+
+  >>> mailin.process(msg)
+  >>> emails[0][0].id
+  'zope.anybody'
+
+  >>> from zojax.mail.interfaces import IPrincipalByEMail
+
+  >>> class PrincipalByEmail(object):
+  ...     interface.implements(IPrincipalByEMail)
+  ...     
+  ...     def getPrincipal(self, email):
+  ...         if email == 'nkim@zojax.net':
+  ...             return auth.getPrincipal('zope.user')
+
+  >>> component.provideUtility(PrincipalByEmail(), name='test')
+
+  >>> emails = []
+  >>> mailin.process(msg)
+  >>> emails[0][0].id
+  'zope.user'
+
+  >>> ContentRecipient.error = True
+
+  >>> emails = []
+  >>> mailin.process(msg)
+
+
+Remove content
+--------------
+
+  >>> del root['content']
+
+  >>> print component.queryUtility(
+  ...     interfaces.IMailInDestination, 'reply@zojax.net')
+  None
+
+
+cleanup
+
+  >>> sync()
+  >>> setSite(None)

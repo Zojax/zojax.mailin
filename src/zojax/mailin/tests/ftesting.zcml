@@ -1,0 +1,52 @@
+<configure
+   xmlns="http://namespaces.zope.org/zope"
+   xmlns:zojax="http://namespaces.zope.org/zojax"
+   xmlns:browser="http://namespaces.zope.org/browser"
+   i18n_domain="zope">
+
+  <include package="zojax.autoinclude" file="meta.zcml" />
+  <includeAllDependencies package="zojax.mailin" extras="test" />
+  <includeOverrides package="zojax.mailin.tests" file="overrides.zcml" />
+
+  <interface
+     name="DefaultSkin"
+     interface="zojax.mailin.tests.tests.IDefaultSkin"
+     type="zope.publisher.interfaces.browser.IBrowserSkinType" />
+
+  <browser:defaultSkin name="DefaultSkin" />
+
+  <class class="zojax.mailin.tests.tests.Content">
+    <allow interface="zope.location.interfaces.ILocation" />
+  </class>
+
+  <securityPolicy
+     component="zojax.security.securitypolicy.SecurityPolicy" />
+
+  <role id="zope.Anonymous" title="Everybody" />
+  <role id="zope.Manager" title="Site Manager" />
+
+  <!-- Replace the following directive if you don't want public access -->
+  <grant permission="zope.View" role="zope.Anonymous" />
+
+  <!-- Principals -->
+  <unauthenticatedPrincipal
+      id="zope.anybody"
+      title="Unauthenticated User" />
+
+  <!-- Principal that tests generally run as -->
+  <principal
+      id="zope.mgr"
+      title="Manager"
+      login="mgr"
+      password="mgrpw" />
+
+  <principal
+      id="zope.user"
+      title="User"
+      login="user"
+      password="userpw" />
+
+  <grant role="zope.Manager" principal="zope.mgr" />
+  <grantAll role="zope.Manager" />
+
+</configure>
