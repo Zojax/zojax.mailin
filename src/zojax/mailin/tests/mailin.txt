@@ -1,0 +1,114 @@
+=================
+Mail-in configlet
+=================
+
+  >>> from email.MIMEText import MIMEText
+
+  >>> from zope import component, interface
+  >>> from zope.interface.verify import verifyObject
+  >>> from zope.app.component.hooks import getSite, setSite
+  >>> from zope.publisher.browser import TestRequest
+
+  >>> from zojax.mailin import interfaces
+
+  >>> root = getRootFolder()
+  >>> setSite(root)
+
+Mail-in configlet
+
+  >>> mailin = component.getUtility(interfaces.IMailIn)
+
+  >>> verifyObject(interfaces.IMailIn, mailin)
+  True
+
+
+checkMessage
+------------
+Check for loop, spam, etc
+
+  >>> msg = MIMEText('Test mail message', 'plain', 'ascii')
+  >>> msg['X-Mailer'] = 'zojax.mailer'
+  >>> msgText = str(msg)
+  >>> request = TestRequest(environ={'HTTP_X_FORWARDED_FOR': '192.168.0.1'})
+
+  >>> len(msgText)
+  173
+
+  >>> mailin.max_size = 10
+  >>> mailin.checkMessage(msg, msgText, request)
+  Traceback (most recent call last):
+  ...
+  CheckMessageException: Max size exceeded 173
+
+  >>> mailin.max_size = 0
+
+  >>> mailin.mta_hosts = ['192.168.0.10']
+  >>> mailin.checkMessage(msg, msgText, request)
+  Traceback (most recent call last):
+  ...
+  CheckMessageException: Host 192.168.0.1 is not allowed
+
+  >>> mailin.checkMessage(msg, msgText,
+  ...                     TestRequest(environ={'REMOTE_ADDR': '192.168.0.1'}))
+  Traceback (most recent call last):
+  ...
+  CheckMessageException: Host 192.168.0.1 is not allowed
+
+  >>> mailin.checkMessage(msg, msgText, TestRequest())
+  Traceback (most recent call last):
+  ...
+  CheckMessageException: Loop detected
+
+
+process
+-------
+process incoming message, deliver message to destination
+
+  >>> msg = MIMEText('Test mail message', 'plain', 'ascii')
+  >>> msg['To'] = 'comments@zojax.net'
+
+  >>> mailin.process(msg)
+  Traceback (most recent call last):
+  ...
+  MailInException: Can't find destination location: comments@zojax.net
+
+register destination that accept message
+
+  >>> emails = []
+  >>> 
+  >>> class TestDestination(object):
+  ...     interface.implements(interfaces.IMailInDestination)
+  ...     
+  ...     def process(self, message):
+  ...         emails.append(message)
+
+  >>> dest = TestDestination()
+  >>> component.getSiteManager().registerUtility(
+  ...     dest, name='comments@zojax.net')
+
+  >>> mailin.process(msg)
+
+  >>> print str(emails[0])
+  From nobody ...
+  MIME-Version: 1.0
+  Content-Type: text/plain; charset="us-ascii"
+  Content-Transfer-Encoding: 7bit
+  To: comments@zojax.net
+  Test mail message
+
+  >>> msg = MIMEText('Test mail message', 'plain', 'ascii')
+  >>> msg['To'] = 'unknown@zojax.net'
+
+  >>> mailin.process(msg)
+  Traceback (most recent call last):
+  ...
+  MailInException: Can't find destination location: unknown@zojax.net
+
+
+cleanup
+
+  >>> _t = component.getSiteManager().unregisterUtility(
+  ...     dest, interfaces.IMailInDestination, 'comments@zojax.net')
+
+  >>> sync()
+  >>> setSite(None)

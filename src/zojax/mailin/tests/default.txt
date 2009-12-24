@@ -1,0 +1,194 @@
+===========================
+Default Mail-in destination
+===========================
+
+  >>> from email.MIMEText import MIMEText
+
+  >>> from zope import component, interface
+  >>> from zope.interface.verify import verifyObject
+  >>> from zope.app.intid.interfaces import IIntIds
+  >>> from zope.app.component.hooks import getSite, setSite
+  >>> from zope.publisher.browser import TestRequest
+
+  >>> from zojax.mailin import interfaces
+  >>> from zojax.mailin.tests.tests import IContent, Content
+
+  >>> root = getRootFolder()
+  >>> setSite(root)
+  >>> ids = component.getUtility(IIntIds)
+  >>> mailin = component.getUtility(interfaces.IMailIn)
+
+
+Default mail-in destination
+
+  >>> default = component.getUtility(interfaces.IDefaultMailInDestination)
+
+  >>> verifyObject(interfaces.IDefaultMailInDestination, default)
+  True
+
+  >>> default.isAvailable()
+  False
+
+  >>> default.enabled = False
+  >>> default.address = u'comments@zojax.net'
+
+  >>> default.canHandle(('comments@zojax.net',), None)
+  False
+
+  >>> default.enabled = True
+
+  >>> default.canHandle(('comments@zojax.net',), None)
+  True
+
+
+we need context
+
+  >>> content = Content()
+  >>> root['content'] = content
+
+generateMessageId
+-----------------
+
+  >>> mid = default.generateMessageId(content)
+
+  >>> mid
+  '...@zojax.net'
+
+  >>> mid.split('@', 1)[0].split('.', 1)[0] == str(ids.getId(content))
+  True
+
+  >>> mid = default.generateMessageId(content, 'testsalt')
+  >>> mid == '%s.testsalt@zojax.net'%str(ids.getId(content))
+  True
+
+process
+--------
+
+  >>> msg = MIMEText('Test mail message', 'plain', 'ascii')
+  >>> default.process(msg)
+  Traceback (most recent call last):
+  ...
+  MailInException: Recipent not found.
+
+  >>> msg = MIMEText('Test mail message', 'plain', 'ascii')
+  >>> msg['Message-ID'] = 'error.error@zojax.net'
+  >>> default.process(msg)
+  Traceback (most recent call last):
+  ...
+  MailInException: Recipent not found.
+
+  >>> msg = MIMEText('Test mail message', 'plain', 'ascii')
+  >>> msg['Message-ID'] = '2132123423.error@zojax.net'
+  >>> default.process(msg)
+  Traceback (most recent call last):
+  ...
+  MailInException: Recipent not found.
+
+  >>> _t = default.uids.insert(2132123423)
+  >>> default.process(msg)
+  Traceback (most recent call last):
+  ...
+  MailInException: Recipent not found.
+
+  >>> msg = MIMEText('Test mail message', 'plain', 'ascii')
+  >>> msg['From'] = 'nkim@zojax.net'
+  >>> msg['Message-ID'] = default.generateMessageId(content, 'testsalt')
+  >>> default.process(msg)
+  Traceback (most recent call last):
+  ...
+  MailInException: Recipent not found.
+
+Let's define IRecipient
+
+  >>> from zope.security.management import getInteraction
+
+  >>> emails = []
+
+  >>> class ContentRecipient(object):
+  ...     component.adapts(IContent)
+  ...     interface.implements(interfaces.IRecipient)
+  ...     
+  ...     error = False
+  ...     
+  ...     def __init__(self, context):
+  ...         self.context = context
+  ...     
+  ...     def process(self, message):
+  ...         if self.error:
+  ...             raise 'Error'
+  ...         emails.append((
+  ...             getInteraction().participations[0].principal, message))
+  ...         
+  ...     def bounced(self, message):
+  ...         pass
+
+  >>> component.provideAdapter(ContentRecipient)
+
+  >>> default.process(msg)
+  Traceback (most recent call last):
+  ...
+  MailInException: Member not found: nkim@zojax.net
+
+We can allow anonymous mailin
+
+  >>> interface.classImplements(ContentRecipient, interfaces.IAnonymousSupport)
+
+  >>> default.process(msg)
+
+  >>> emails[0][0].id
+  'zope.anybody'
+
+  >>> print str(emails[0][1])
+  From nobody ...
+  MIME-Version: 1.0
+  Content-Type: text/plain; charset="us-ascii"
+  Content-Transfer-Encoding: 7bit
+  From: nkim@zojax.net
+  Message-ID: ...testsalt@zojax.net
+  Test mail message
+
+  >>> from zope.publisher.browser import TestRequest
+  >>> from zope.security.management import newInteraction, endInteraction
+  >>> from zope.app.security.interfaces import IAuthentication
+
+  >>> auth = component.getUtility(IAuthentication)
+
+  >>> emails = []
+  >>> admin = auth.getPrincipal('zope.mgr')
+  >>> request = TestRequest()
+  >>> request.setPrincipal(admin)
+  >>> newInteraction(request)
+
+  >>> default.process(msg)
+  >>> emails[0][0].id
+  'zope.anybody'
+
+  >>> from zojax.mail.interfaces import IPrincipalByEMail
+
+  >>> class PrincipalByEmail(object):
+  ...     interface.implements(IPrincipalByEMail)
+  ...     
+  ...     def getPrincipal(self, email):
+  ...         if email == 'nkim@zojax.net':
+  ...             return auth.getPrincipal('zope.user')
+
+  >>> component.provideUtility(PrincipalByEmail(), name='test')
+
+  >>> emails = []
+  >>> default.process(msg)
+  >>> emails[0][0].id
+  'zope.user'
+
+test
+
+  >>> ContentRecipient.error = True
+
+  >>> emails = []
+  >>> default.process(msg)
+
+
+cleanup
+
+  >>> sync()
+  >>> setSite(None)
+
