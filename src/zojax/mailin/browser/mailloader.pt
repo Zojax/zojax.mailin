@@ -1,12 +1,12 @@
-<h2>Mail loader script</h2>
-<div class="z-page-description">This script helps upload emails to site.</div>
+<h2 i18n:translate="">Mail loader script</h2>
+<div class="z-page-description" i18n:translate="">This script helps upload emails to site.</div>
 
 
-<a href="../../mailloader.py">Download mailloader script</a>
+<a href="../../mailloader.py" i18n:translate="">Download mailloader script</a>
 <br /><br />
 
-Simplest solution to use mta aliases file:
-<blockquote>
+<tal:block i18n:translate="">Simplest solution to use mta aliases file:</tal:block>
+<blockquote i18n:translate="">
 (address): |"python path-to-script/mailloader.py"
 </blockquote>
 <br />
